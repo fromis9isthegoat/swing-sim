@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>스윙 모의투자 대시보드</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f7f7f5;--card:#fff;--tx:#1d1d1b;--mu:#6b6b66;--bd:#e3e3de;--up:#d93025;--dn:#1a56db}
+@media (prefers-color-scheme:dark){:root{--bg:#161615;--card:#212120;--tx:#f0f0ec;--mu:#9a9a94;--bd:#35352f;--up:#ff6b5e;--dn:#6ea0ff}}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;line-height:1.5}
+main{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:8px 0 4px}h2{font-size:16px;margin:24px 0 8px}
+.mu{color:var(--mu);font-size:13px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
+.k{font-size:12px;color:var(--mu)}.v{font-size:20px;font-weight:700;margin-top:2px}
+.up{color:var(--up)}.dn{color:var(--dn)}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;white-space:nowrap}
+th,td{padding:8px;border-bottom:1px solid var(--bd);text-align:right}th:first-child,td:first-child{text-align:left}
+th{color:var(--mu);font-weight:500}
+.log{margin-bottom:10px}.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:99px;border:1px solid var(--bd);margin-right:6px}
+.why{font-size:13px;color:var(--mu);margin-top:6px;word-break:keep-all}
+</style>
+</head>
+<body>
+<main>
+<h1>📈 스윙 모의투자 대시보드</h1>
+<div class="mu">가상 자본금 1억 원 모의투자입니다. 투자 권유가 아닙니다.</div>
+<div id="upd" class="mu" style="margin-top:6px"></div>
+<div id="sum" class="grid"></div>
+<h2>보유 종목</h2>
+<div class="card scroll" id="pos"><span class="mu">불러오는 중…</span></div>
+<h2>매매 기록 (최근 50건)</h2>
+<div id="log"><span class="mu">아직 매매 기록이 없습니다.</span></div>
+</main>
+<script>
+const CAP=100000000,$=id=>document.getElementById(id);
+const fmt=(n,d=0)=>Number(n).toLocaleString('ko-KR',{maximumFractionDigits:d,minimumFractionDigits:d});
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const cls=n=>n>0?'up':n<0?'dn':'';
+function parseCSV(t){const o=[];let r=[],f='',q=false;
+for(let i=0;i<t.length;i++){const c=t[i];
+if(q){if(c=='"'){if(t[i+1]=='"'){f+='"';i++}else q=false}else f+=c}
+else if(c=='"')q=true;else if(c==','){r.push(f);f=''}
+else if(c=='\n'||c=='\r'){if(c=='\r'&&t[i+1]=='\n')i++;r.push(f);f='';if(r.length>1)o.push(r);r=[]}
+else f+=c}
+if(f!==''||r.length){r.push(f);if(r.length>1)o.push(r)}return o}
+async function main(){
+let state=null,logText='';
+try{const r=await fetch('state.json?'+Date.now());if(r.ok)state=await r.json()}catch(e){}
+try{const r=await fetch('trade_log.csv?'+Date.now());if(r.ok)logText=await r.text()}catch(e){}
+if(!state){$('pos').innerHTML='<span class="mu">state.json을 불러오지 못했습니다. 자동 실행이 한 번 끝난 뒤 다시 열어 주세요.</span>';return}
+const rows=parseCSV(logText).slice(1),names={};
+rows.forEach(r=>{const m=/^(.*)\((.*)\)$/.exec(r[2]||'');if(m)names[m[2]]=m[1]});
+const fx=state.fx||1400;let val=0,html='';
+const ents=Object.entries(state.positions||{});
+ents.forEach(([s,p])=>{const px=(state.prices||{})[s]??p.entry,rate=p.mkt==='US'?fx:1;val+=p.qty*px*rate;
+const pnl=(px/p.entry-1)*100;
+html+=`<tr><td>${esc(names[s]||s)}</td><td>${p.mkt}</td><td>${fmt(p.qty)}</td><td>${fmt(p.entry,2)}</td><td>${fmt(px,2)}</td><td class="${cls(pnl)}">${pnl>=0?'+':''}${fmt(pnl,1)}%</td><td>${fmt(p.stop,2)}</td><td>${fmt(p.target,2)}</td></tr>`});
+const eq=state.cash+val,ret=(eq/CAP-1)*100;
+$('upd').textContent=state.updated?'마지막 실행: '+state.updated:'';
+$('sum').innerHTML=`<div class="card"><div class="k">총자산</div><div class="v">${fmt(eq)}원</div></div>
+<div class="card"><div class="k">수익률</div><div class="v ${cls(ret)}">${ret>=0?'+':''}${fmt(ret,2)}%</div></div>
+<div class="card"><div class="k">현금</div><div class="v">${fmt(state.cash)}원</div></div>
+<div class="card"><div class="k">보유 종목</div><div class="v">${ents.length}개</div></div>`;
+$('pos').innerHTML=ents.length?`<table><tr><th>종목</th><th>시장</th><th>수량</th><th>매수가</th><th>현재가</th><th>손익</th><th>손절</th><th>목표</th></tr>${html}</table>`:'<span class="mu">보유 종목 없음</span>';
+if(rows.length)$('log').innerHTML=rows.slice(-50).reverse().map(r=>`<div class="card log"><span class="tag ${r[1]==='매수'?'up':'dn'}">${esc(r[1])}</span><b>${esc(r[2])}</b> <span class="mu">${esc(r[3])}주 @ ${esc(r[4])} · ${esc(r[0])}</span><div class="why">${esc(r[5]||'')}</div></div>`).join('')}
+main();
+</script>
+</body>
+</html>
