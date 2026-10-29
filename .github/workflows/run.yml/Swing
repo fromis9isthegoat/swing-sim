@@ -1,1 +1,27 @@
-
+name: run
+on:
+  schedule:
+    - cron: "0 7 * * 1-5"
+    - cron: "30 21 * * 1-5"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install yfinance pandas
+      - run: |
+          if [ "${{ github.event.schedule }}" = "0 7 * * 1-5" ]; then python swing_sim.py KR
+          elif [ "${{ github.event.schedule }}" = "30 21 * * 1-5" ]; then python swing_sim.py US
+          else python swing_sim.py; fi
+      - run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git commit -m "update" || echo "no changes"
+          git push
